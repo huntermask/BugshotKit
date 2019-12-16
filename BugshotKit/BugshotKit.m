@@ -15,7 +15,7 @@
 
 NSString * const BSKNewLogMessageNotification = @"BSKNewLogMessageNotification";
 
-UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
+UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)(void))
 {
     UIGraphicsBeginImageContextWithOptions(size, NO, [UIScreen mainScreen].scale);
     drawingCommands();
@@ -39,7 +39,6 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
 }
 @property (nonatomic) BOOL isShowing;
 @property (nonatomic) BOOL isDisabled;
-@property (nonatomic, weak) BSKNavigationController *presentedNavigationController;
 @property (nonatomic, weak) UIWindow *window;
 @property (nonatomic) NSMapTable *windowsWithGesturesAttached;
 
@@ -72,7 +71,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
     BugshotKit.sharedManager.invocationGestures = invocationGestures;
     BugshotKit.sharedManager.invocationGesturesTouchCount = fingerCount;
     BugshotKit.sharedManager.destinationEmailAddress = toEmailAddress;
-    
+
     // dispatched to next main-thread loop so the app delegate has a chance to set up its window
     dispatch_async(dispatch_get_main_queue(), ^{
         [BugshotKit.sharedManager ensureWindow];
@@ -86,7 +85,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
     [BugshotKit.sharedManager handleOpenGesture:nil];
 }
 
-+ (void)setExtraInfoBlock:(NSDictionary *(^)())extraInfoBlock
++ (void)setExtraInfoBlock:(NSDictionary *(^)(void))extraInfoBlock
 {
     BugshotKit.sharedManager.extraInfoBlock = extraInfoBlock;
 }
@@ -101,16 +100,6 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
     BugshotKit.sharedManager.emailBodyBlock = emailBodyBlock;
 }
 
-+ (void)setMailComposeCustomizeBlock:(void (^)(MFMailComposeViewController *mailComposer))mailComposeCustomizeBlock
-{
-    BugshotKit.sharedManager.mailComposeCustomizeBlock = mailComposeCustomizeBlock;
-}
-
-+ (void)setDisplayConsoleTextInLogViewer:(BOOL)displayText
-{
-    BugshotKit.sharedManager.displayConsoleTextInLogViewer = displayText;
-}
-
 + (UIFont *)consoleFontWithSize:(CGFloat)size
 {
     static dispatch_once_t onceToken;
@@ -118,7 +107,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
     dispatch_once(&onceToken, ^{
         consoleFontName = nil;
 
-        NSData *inData = [NSData dataWithContentsOfFile:[[NSBundle bundleForClass:[self class]].resourcePath stringByAppendingPathComponent:@"Inconsolata.otf"]];
+        NSData *inData = [NSData dataWithContentsOfFile:[NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"Inconsolata.otf"]];
         if (inData) {
             CFErrorRef error;
             CGDataProviderRef provider = CGDataProviderCreateWithCFData((CFDataRef)inData);
@@ -134,12 +123,12 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
             CFRelease(font);
             CFRelease(provider);
         } else {
-            NSLog(@"[BugshotKit] Console font not found. Please add Inconsolata.otf to your Resources.");        
+            NSLog(@"[BugshotKit] Console font not found. Please add Inconsolata.otf to your Resources.");
         }
 
         if (! consoleFontName) consoleFontName = @"CourierNewPSMT";
     });
-    
+
     return [UIFont fontWithName:consoleFontName size:size];
 }
 
@@ -151,26 +140,26 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
             NSLog(@"[BugshotKit] App Store build detected. BugshotKit is disabled.");
             return self;
         }
-        
+
         self.windowsWithGesturesAttached = [NSMapTable weakToWeakObjectsMapTable];
-        
+
         self.annotationFillColor = [UIColor colorWithRed:1.0f green:0.2196f blue:0.03922f alpha:1.0f]; // Bugshot red-orange
         self.annotationStrokeColor = [UIColor whiteColor];
-        
+
         self.toggleOnColor = [UIColor colorWithRed:0.533f green:0.835f blue:0.412f alpha:1.0f]; // iOS 7 green
         self.toggleOffColor = [UIColor colorWithRed:184/255.0f green:184/255.0f blue:191/255.0f alpha:1.0f]; // iOS 7ish light gray
-        
+
         self.collectedASLMessageIDs = [NSMutableSet set];
         self.consoleMessages = [NSMutableArray array];
         self.logQueue = dispatch_queue_create("BugshotKit console", NULL);
-        
+
         self.consoleLogMaxLines = 500;
-        
+
         self.consoleRefreshThrottler = [[BSK_MABGTimer alloc] initWithObject:self behavior:BSK_MABGTimerCoalesce queueLabel:"BugshotKit console throttler"];
         [self.consoleRefreshThrottler setTargetQueue:self.logQueue];
-        
+
         [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(newWindowDidBecomeVisible:) name:UIWindowDidBecomeVisibleNotification object:nil];
-        
+
         // Notify on every write to stderr (so we can track NSLog real-time, without polling, when a console is showing)
         source = dispatch_source_create(DISPATCH_SOURCE_TYPE_VNODE, (uintptr_t)fileno(stderr), DISPATCH_VNODE_WRITE, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
         __weak BugshotKit *weakSelf = self;
@@ -183,10 +172,11 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
                 }
             }];
         });
-        
+
+        dispatch_source_t __weak wSource;
         dispatch_async(self.logQueue, ^{
             [self updateFromASL];
-            dispatch_resume(source);
+            dispatch_resume(wSource);
         });
     }
     return self;
@@ -203,7 +193,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
 - (void)ensureWindow
 {
     if (self.window) return;
-    
+
     self.window = UIApplication.sharedApplication.keyWindow;
     if (! self.window) self.window = UIApplication.sharedApplication.windows.lastObject;
     if (! self.window) [[NSException exceptionWithName:NSGenericException reason:@"BugshotKit cannot find any application windows" userInfo:nil] raise];
@@ -243,7 +233,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
         // Making four different GRs, rather than one with all four directions set, so it's possible to distinguish which direction was swiped in the action method.
         //
         // (dealing with rotation is awesome)
-        
+
         UISwipeGestureRecognizer *sgr = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleOpenGesture:)];
         sgr.numberOfTouchesRequired = fingerCount;
         sgr.direction = UISwipeGestureRecognizerDirectionUp;
@@ -275,7 +265,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
     if (invocationGestures & BSKInvocationGestureSwipeFromRightEdge) {
         // Similar deal with these (see swipe recognizers above), but screen-edge gesture recognizers always return 0 upon reading the .edges property.
         // I guess it's write-only. So we actually need four different action methods to know which one was invoked.
-        
+
         UIScreenEdgePanGestureRecognizer *egr = [[UIScreenEdgePanGestureRecognizer alloc] initWithTarget:self action:@selector(topEdgePanGesture:)];
         egr.edges = UIRectEdgeTop;
         egr.minimumNumberOfTouches = fingerCount;
@@ -324,7 +314,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
         [window addGestureRecognizer:tgr];
         NSLog(@"[BugshotKit] Enabled for %d-finger triple-tap.", (int) fingerCount);
     }
-    
+
     if (invocationGestures & BSKInvocationGestureLongPress) {
         UILongPressGestureRecognizer *tgr = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleOpenGesture:)];
         tgr.numberOfTouchesRequired = fingerCount;
@@ -339,36 +329,36 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
 - (void)leftEdgePanGesture:(UIScreenEdgePanGestureRecognizer *)egr
 {
     if ([egr translationInView:self.window].x < 60) return;
-    if ([UIApplication sharedApplication].statusBarOrientation == UIInterfaceOrientationPortraitUpsideDown) [self handleOpenGesture:egr];
+    if (self.window.rootViewController.interfaceOrientation == UIInterfaceOrientationPortraitUpsideDown) [self handleOpenGesture:egr];
 }
 
 - (void)rightEdgePanGesture:(UIScreenEdgePanGestureRecognizer *)egr
 {
     if ([egr translationInView:self.window].x > -60) return;
-    if ([UIApplication sharedApplication].statusBarOrientation == UIInterfaceOrientationPortrait) [self handleOpenGesture:egr];
+    if (self.window.rootViewController.interfaceOrientation == UIInterfaceOrientationPortrait) [self handleOpenGesture:egr];
 }
 
 - (void)topEdgePanGesture:(UIScreenEdgePanGestureRecognizer *)egr
 {
     if ([egr translationInView:self.window].y < 60) return;
-    if ([UIApplication sharedApplication].statusBarOrientation == UIInterfaceOrientationLandscapeLeft) [self handleOpenGesture:egr];
+    if (self.window.rootViewController.interfaceOrientation == UIInterfaceOrientationLandscapeLeft) [self handleOpenGesture:egr];
 }
 
 - (void)bottomEdgePanGesture:(UIScreenEdgePanGestureRecognizer *)egr
 {
     if ([egr translationInView:self.window].y > -60) return;
-    if ([UIApplication sharedApplication].statusBarOrientation == UIInterfaceOrientationLandscapeRight) [self handleOpenGesture:egr];
+    if (self.window.rootViewController.interfaceOrientation == UIInterfaceOrientationLandscapeRight) [self handleOpenGesture:egr];
 }
 
 - (void)handleOpenGesture:(UIGestureRecognizer *)sender
 {
     if (self.isShowing) return;
 
-    UIInterfaceOrientation interfaceOrientation = [UIApplication sharedApplication].statusBarOrientation;
-    
+    UIInterfaceOrientation interfaceOrientation = self.window.rootViewController.interfaceOrientation;
+
     if (sender && [sender isKindOfClass:UISwipeGestureRecognizer.class]) {
         UISwipeGestureRecognizer *sgr = (UISwipeGestureRecognizer *)sender;
-        
+
         BOOL validSwipe = NO;
         if (self.invocationGestures & BSKInvocationGestureSwipeUp) {
             if      (interfaceOrientation == UIInterfaceOrientationPortrait && sgr.direction == UISwipeGestureRecognizerDirectionUp) validSwipe = YES;
@@ -376,39 +366,39 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
             else if (interfaceOrientation == UIInterfaceOrientationLandscapeLeft && sgr.direction == UISwipeGestureRecognizerDirectionLeft) validSwipe = YES;
             else if (interfaceOrientation == UIInterfaceOrientationLandscapeRight && sgr.direction == UISwipeGestureRecognizerDirectionRight) validSwipe = YES;
         }
-        
+
         if (! validSwipe && (self.invocationGestures & BSKInvocationGestureSwipeDown)) {
             if      (interfaceOrientation == UIInterfaceOrientationPortrait && sgr.direction == UISwipeGestureRecognizerDirectionDown) validSwipe = YES;
             else if (interfaceOrientation == UIInterfaceOrientationPortraitUpsideDown && sgr.direction == UISwipeGestureRecognizerDirectionUp) validSwipe = YES;
             else if (interfaceOrientation == UIInterfaceOrientationLandscapeLeft && sgr.direction == UISwipeGestureRecognizerDirectionRight) validSwipe = YES;
             else if (interfaceOrientation == UIInterfaceOrientationLandscapeRight && sgr.direction == UISwipeGestureRecognizerDirectionLeft) validSwipe = YES;
         }
-        
+
         if (! validSwipe) return;
     }
 
     self.isShowing = YES;
 
     UIGraphicsBeginImageContextWithOptions(self.window.bounds.size, NO, UIScreen.mainScreen.scale);
-    
+
     NSMutableSet *drawnWindows = [NSMutableSet set];
     for (UIWindow *window in UIApplication.sharedApplication.windows) {
         [drawnWindows addObject:window];
         [window drawViewHierarchyInRect:window.bounds afterScreenUpdates:NO];
     }
-    
+
     // Must iterate through all windows we know about because UIAlertViews, etc. don't add themselves to UIApplication.windows
     for (UIWindow *window in self.windowsWithGesturesAttached) {
         if ([drawnWindows containsObject:window]) continue;
         [drawnWindows addObject:window];
-        
+
         [window.layer renderInContext:UIGraphicsGetCurrentContext()]; // drawViewHierarchyInRect: doesn't capture UIAlertView opacity properly
     }
 
     self.snapshotImage = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
 
-    if ([UIDevice currentDevice].systemVersion.floatValue < 8.0f && interfaceOrientation != UIInterfaceOrientationPortrait) {
+    if (interfaceOrientation != UIInterfaceOrientationPortrait) {
         self.snapshotImage = [[UIImage alloc] initWithCGImage:self.snapshotImage.CGImage scale:UIScreen.mainScreen.scale orientation:(
             interfaceOrientation == UIInterfaceOrientationPortraitUpsideDown ? UIImageOrientationDown : (
                 interfaceOrientation == UIInterfaceOrientationLandscapeLeft ? UIImageOrientationRight : UIImageOrientationLeft
@@ -418,24 +408,13 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
 
     UIViewController *presentingViewController = self.window.rootViewController;
     while (presentingViewController.presentedViewController) presentingViewController = presentingViewController.presentedViewController;
-    
+
     BSKMainViewController *mvc = [[BSKMainViewController alloc] init];
     mvc.delegate = self;
-    BSKNavigationController *nc = [[BSKNavigationController alloc] initWithRootViewController:mvc lockedToRotation:[UIApplication sharedApplication].statusBarOrientation];
-    self.presentedNavigationController = nc;
+    BSKNavigationController *nc = [[BSKNavigationController alloc] initWithRootViewController:mvc lockedToRotation:self.window.rootViewController.interfaceOrientation];
     nc.navigationBar.tintColor = BugshotKit.sharedManager.annotationFillColor;
-    nc.navigationBar.titleTextAttributes = @{ NSForegroundColorAttributeName:BugshotKit.sharedManager.annotationFillColor };
-    [presentingViewController presentViewController:nc animated:YES completion:NULL];
-}
 
-+ (void)dismissAnimated:(BOOL)animated completion:(void(^)())completion {
-    UIViewController *presentingVC = BugshotKit.sharedManager.presentedNavigationController.presentingViewController;
-    if (presentingVC) {
-        [presentingVC dismissViewControllerAnimated:animated completion:completion];
-        [BugshotKit.sharedManager mainViewControllerDidClose:nil];
-    } else {
-        if (completion) completion();
-    }
+    [presentingViewController presentViewController:nc animated:YES completion:NULL];
 }
 
 - (void)mainViewControllerDidClose:(BSKMainViewController *)mainViewController
@@ -475,7 +454,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
 - (void)clearLog
 {
     if (self.isDisabled) return;
-    
+
     [self.consoleMessages removeAllObjects];
     dispatch_async(dispatch_get_main_queue(), ^{
         [NSNotificationCenter.defaultCenter postNotificationName:BSKNewLogMessageNotification object:nil];
@@ -486,7 +465,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
 {
     BugshotKit *manager = BugshotKit.sharedManager;
     if (manager.isDisabled) return;
-    
+
     dispatch_async(manager.logQueue, ^{
         [manager addLogMessage:message timestamp:[NSDate date].timeIntervalSince1970];
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -502,26 +481,11 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)())
     msg.message = message;
     msg.timestamp = timestamp;
     [self.consoleMessages addObject:msg];
-    
+
     // once the log has exceeded the length limit by 25%, prune it to the length limit
     if (self.consoleMessages.count > self.consoleLogMaxLines * 1.25) {
         [self.consoleMessages removeObjectsInRange:NSMakeRange(0, self.consoleMessages.count - self.consoleLogMaxLines)];
     }
-}
-
-// Because aslresponse_next is now deprecated.
-asl_object_t SystemSafeASLNext(asl_object_t r) {
-    if ([UIDevice currentDevice].systemVersion.floatValue >= 8.0f) {
-        return asl_next(r);
-    }
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    // The deprecation attribute incorrectly states that the replacement method, asl_next()
-    // is available in __IPHONE_7_0; asl_next() first appears in __IPHONE_8_0.
-    // This would require both a compile and runtime check to properly implement the new method
-    // while the minimum deployment target for this project remains iOS 7.0.
-    return aslresponse_next(r);
-#pragma clang diagnostic pop
 }
 
 // assumed to always be in logQueue
@@ -530,13 +494,13 @@ asl_object_t SystemSafeASLNext(asl_object_t r) {
     pid_t myPID = getpid();
 
     // thanks http://www.cocoanetics.com/2011/03/accessing-the-ios-system-log/
-    
+
     aslmsg q, m;
     q = asl_new(ASL_TYPE_QUERY);
     aslresponse r = asl_search(NULL, q);
     BOOL foundNewEntries = NO;
-    
-    while ( (m = SystemSafeASLNext(r)) ) {
+
+    while ( (m = asl_next(r)) ) {
         if (myPID != atol(asl_get(m, ASL_KEY_PID))) continue;
 
         // dupe checking
@@ -544,26 +508,12 @@ asl_object_t SystemSafeASLNext(asl_object_t r) {
         if ([_collectedASLMessageIDs containsObject:msgID]) continue;
         [_collectedASLMessageIDs addObject:msgID];
         foundNewEntries = YES;
-        
-        NSTimeInterval msgTime = (NSTimeInterval) atol(asl_get(m, ASL_KEY_TIME)) + ((NSTimeInterval) atol(asl_get(m, ASL_KEY_TIME_NSEC)) / 1000000000.0);
 
-        const char *msg = asl_get(m, ASL_KEY_MSG);
-        if (msg == NULL) { continue; }
-        [self addLogMessage:[NSString stringWithUTF8String:msg] timestamp:msgTime];
+        NSTimeInterval msgTime = (NSTimeInterval) atol(asl_get(m, ASL_KEY_TIME)) + ((NSTimeInterval) atol(asl_get(m, ASL_KEY_TIME_NSEC)) / 1000000000.0);
+        [self addLogMessage:[NSString stringWithUTF8String:asl_get(m, ASL_KEY_MSG)] timestamp:msgTime];
     }
-    
-    if ([UIDevice currentDevice].systemVersion.floatValue >= 8.0f) {
-        asl_release(r);
-    } else {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        // The deprecation attribute incorrectly states that the replacement method, asl_release()
-        // is available in __IPHONE_7_0; asl_release() first appears in __IPHONE_8_0.
-        // This would require both a compile and runtime check to properly implement the new method
-        // while the minimum deployment target for this project remains iOS 7.0.
-        aslresponse_free(r);
-#pragma clang diagnostic pop
-    }
+
+    asl_release(r);
     asl_free(q);
 
     return foundNewEntries;
@@ -620,7 +570,8 @@ asl_object_t SystemSafeASLNext(asl_object_t r) {
 {
 #if TARGET_IPHONE_SIMULATOR
     return NO;
-#else
+#endif
+
     // Adapted from https://github.com/blindsightcorp/BSMobileProvision
 
     NSString *binaryMobileProvision = [NSString stringWithContentsOfFile:[NSBundle.mainBundle pathForResource:@"embedded" ofType:@"mobileprovision"] encoding:NSISOLatin1StringEncoding error:NULL];
@@ -637,13 +588,12 @@ asl_object_t SystemSafeASLNext(asl_object_t r) {
     if (error) return YES; // unknown plist format
 
     if (! mobileProvision || ! mobileProvision.count) return YES; // no entitlements
-    
+
     if (mobileProvision[@"ProvisionsAllDevices"]) return NO; // enterprise provisioning
-    
+
     if (mobileProvision[@"ProvisionedDevices"] && ((NSDictionary *)mobileProvision[@"ProvisionedDevices"]).count) return NO; // development or ad-hoc
 
     return YES; // expected development/enterprise/ad-hoc entitlements not found
-#endif
 }
 
 

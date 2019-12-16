@@ -20,21 +20,20 @@ typedef enum : NSUInteger {
     BSKInvocationGestureSwipeFromRightEdge = (1 << 2), // For whatever reason, this gesture recognizer always only needs one touch, regardless of your numberOfTouches setting.
     BSKInvocationGestureDoubleTap = (1 << 3),
     BSKInvocationGestureTripleTap = (1 << 4),
-	BSKInvocationGestureLongPress = (1 << 5),
+    BSKInvocationGestureLongPress = (1 << 5),
 } BSKInvocationGestureMask;
 
 @interface BugshotKit : NSObject <UIGestureRecognizerDelegate, BSKMainViewControllerDelegate>
 
 /*
     Call this from your UIApplication didFinishLaunching:... method.
-    
+
     Optionally, multiple email addresses can be specified, separated by commas in the string.
 */
 + (void)enableWithNumberOfTouches:(NSUInteger)fingerCount performingGestures:(BSKInvocationGestureMask)invocationGestures feedbackEmailAddress:(NSString *)toEmailAddress;
 
 /* You can also always show it manually */
 + (void)show;
-+ (void)dismissAnimated:(BOOL)animated completion:(void(^)())completion;
 
 + (instancetype)sharedManager;
 - (void)clearLog;
@@ -57,7 +56,7 @@ typedef enum : NSUInteger {
 
     To add more keys to get merged into this dictionary, return them from a custom extraInfoBlock:
 */
-+ (void)setExtraInfoBlock:(NSDictionary *(^)())extraInfoBlock;
++ (void)setExtraInfoBlock:(NSDictionary *(^)(void))extraInfoBlock;
 
 
 /*
@@ -69,24 +68,11 @@ typedef enum : NSUInteger {
 
 /*
  You can optionally customize the email body by setting an emailBodyBlock.
- 
+
  info is the app-info dictionary from above (including anything you provided with extraInfoBlock)
  */
 + (void)setEmailBodyBlock:(NSString *(^)(NSDictionary *))emailBodyBlock;
 
-/*
- You can optionally customize the mail compose view controller by setting an mailComposeCustomizeBlock.
- 
- Use this block e.g. for adding file attachments to the e-mail being sent.
- */
-+ (void)setMailComposeCustomizeBlock:(void (^)(MFMailComposeViewController *mailComposer))mailComposeCustomizeBlock;
-
-/*
- You can display the console log viewer as selectable text. Defaults to NO which presents a screenshot of the log text.
-
- @param displayText YES if the console log should be displayed as selectable text. NO if it should use a screenshot.
- */
-+ (void)setDisplayConsoleTextInLogViewer:(BOOL)displayText;
 
 // feel free to mess with these if you want
 
@@ -97,8 +83,6 @@ typedef enum : NSUInteger {
              emptyBottomLine:(BOOL)emptyBottomLine
               withCompletion:(void (^)(UIImage *result))completion;
 
-
-@property (nonatomic) BOOL displayConsoleTextInLogViewer;
 @property (nonatomic, strong) UIColor *annotationFillColor;
 @property (nonatomic, strong) UIColor *annotationStrokeColor;
 @property (nonatomic, strong) UIColor *toggleOnColor;
@@ -110,7 +94,6 @@ typedef enum : NSUInteger {
 @property (nonatomic, copy) NSArray *annotations;
 @property (nonatomic, strong) UIImage *annotatedImage;
 @property (nonatomic, copy) NSDictionary *(^extraInfoBlock)();
-@property (nonatomic, copy) void (^mailComposeCustomizeBlock)(MFMailComposeViewController *mailComposer);
 @property (nonatomic, copy) NSString *(^emailSubjectBlock)(NSDictionary *info);
 @property (nonatomic, copy) NSString *(^emailBodyBlock)(NSDictionary *info);
 
