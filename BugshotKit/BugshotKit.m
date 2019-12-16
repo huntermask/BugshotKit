@@ -39,6 +39,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)(void))
 }
 @property (nonatomic) BOOL isShowing;
 @property (nonatomic) BOOL isDisabled;
+@property (nonatomic, weak) BSKNavigationController *presentedNavigationController;
 @property (nonatomic, weak) UIWindow *window;
 @property (nonatomic) NSMapTable *windowsWithGesturesAttached;
 
@@ -100,6 +101,11 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)(void))
     BugshotKit.sharedManager.emailBodyBlock = emailBodyBlock;
 }
 
++ (void)setMailComposeCustomizeBlock:(void (^)(MFMailComposeViewController *mailComposer))mailComposeCustomizeBlock
+{
+    BugshotKit.sharedManager.mailComposeCustomizeBlock = mailComposeCustomizeBlock;
+}
+
 + (UIFont *)consoleFontWithSize:(CGFloat)size
 {
     static dispatch_once_t onceToken;
@@ -107,7 +113,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)(void))
     dispatch_once(&onceToken, ^{
         consoleFontName = nil;
 
-        NSData *inData = [NSData dataWithContentsOfFile:[NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"Inconsolata.otf"]];
+        NSData *inData = [NSData dataWithContentsOfFile:[[NSBundle bundleForClass:[self class]].resourcePath stringByAppendingPathComponent:@"Inconsolata.otf"]];
         if (inData) {
             CFErrorRef error;
             CGDataProviderRef provider = CGDataProviderCreateWithCFData((CFDataRef)inData);
@@ -159,25 +165,6 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)(void))
         [self.consoleRefreshThrottler setTargetQueue:self.logQueue];
 
         [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(newWindowDidBecomeVisible:) name:UIWindowDidBecomeVisibleNotification object:nil];
-
-        // Notify on every write to stderr (so we can track NSLog real-time, without polling, when a console is showing)
-        source = dispatch_source_create(DISPATCH_SOURCE_TYPE_VNODE, (uintptr_t)fileno(stderr), DISPATCH_VNODE_WRITE, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
-        __weak BugshotKit *weakSelf = self;
-        dispatch_source_set_event_handler(source, ^{
-            [weakSelf.consoleRefreshThrottler afterDelay:0.5 do:^(id self) {
-                if ([self updateFromASL]) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        [NSNotificationCenter.defaultCenter postNotificationName:BSKNewLogMessageNotification object:nil];
-                    });
-                }
-            }];
-        });
-
-        dispatch_source_t __weak wSource;
-        dispatch_async(self.logQueue, ^{
-            [self updateFromASL];
-            dispatch_resume(wSource);
-        });
     }
     return self;
 }
@@ -329,33 +316,33 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)(void))
 - (void)leftEdgePanGesture:(UIScreenEdgePanGestureRecognizer *)egr
 {
     if ([egr translationInView:self.window].x < 60) return;
-    if (self.window.rootViewController.interfaceOrientation == UIInterfaceOrientationPortraitUpsideDown) [self handleOpenGesture:egr];
+    if ([UIApplication sharedApplication].statusBarOrientation == UIInterfaceOrientationPortraitUpsideDown) [self handleOpenGesture:egr];
 }
 
 - (void)rightEdgePanGesture:(UIScreenEdgePanGestureRecognizer *)egr
 {
     if ([egr translationInView:self.window].x > -60) return;
-    if (self.window.rootViewController.interfaceOrientation == UIInterfaceOrientationPortrait) [self handleOpenGesture:egr];
+    if ([UIApplication sharedApplication].statusBarOrientation == UIInterfaceOrientationPortrait) [self handleOpenGesture:egr];
 }
 
 - (void)topEdgePanGesture:(UIScreenEdgePanGestureRecognizer *)egr
 {
     if ([egr translationInView:self.window].y < 60) return;
-    if (self.window.rootViewController.interfaceOrientation == UIInterfaceOrientationLandscapeLeft) [self handleOpenGesture:egr];
+    if ([UIApplication sharedApplication].statusBarOrientation == UIInterfaceOrientationLandscapeLeft) [self handleOpenGesture:egr];
 }
 
 - (void)bottomEdgePanGesture:(UIScreenEdgePanGestureRecognizer *)egr
 {
     if ([egr translationInView:self.window].y > -60) return;
-    if (self.window.rootViewController.interfaceOrientation == UIInterfaceOrientationLandscapeRight) [self handleOpenGesture:egr];
+    if ([UIApplication sharedApplication].statusBarOrientation == UIInterfaceOrientationLandscapeRight) [self handleOpenGesture:egr];
 }
 
 - (void)handleOpenGesture:(UIGestureRecognizer *)sender
 {
     if (self.isShowing) return;
 
-    UIInterfaceOrientation interfaceOrientation = self.window.rootViewController.interfaceOrientation;
-
+    UIInterfaceOrientation interfaceOrientation = [UIApplication sharedApplication].statusBarOrientation;
+    
     if (sender && [sender isKindOfClass:UISwipeGestureRecognizer.class]) {
         UISwipeGestureRecognizer *sgr = (UISwipeGestureRecognizer *)sender;
 
@@ -398,7 +385,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)(void))
     self.snapshotImage = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
 
-    if (interfaceOrientation != UIInterfaceOrientationPortrait) {
+    if ([UIDevice currentDevice].systemVersion.floatValue < 8.0f && interfaceOrientation != UIInterfaceOrientationPortrait) {
         self.snapshotImage = [[UIImage alloc] initWithCGImage:self.snapshotImage.CGImage scale:UIScreen.mainScreen.scale orientation:(
             interfaceOrientation == UIInterfaceOrientationPortraitUpsideDown ? UIImageOrientationDown : (
                 interfaceOrientation == UIInterfaceOrientationLandscapeLeft ? UIImageOrientationRight : UIImageOrientationLeft
@@ -411,10 +398,21 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)(void))
 
     BSKMainViewController *mvc = [[BSKMainViewController alloc] init];
     mvc.delegate = self;
-    BSKNavigationController *nc = [[BSKNavigationController alloc] initWithRootViewController:mvc lockedToRotation:self.window.rootViewController.interfaceOrientation];
+    BSKNavigationController *nc = [[BSKNavigationController alloc] initWithRootViewController:mvc lockedToRotation:[UIApplication sharedApplication].statusBarOrientation];
+    self.presentedNavigationController = nc;
     nc.navigationBar.tintColor = BugshotKit.sharedManager.annotationFillColor;
-
+    nc.navigationBar.titleTextAttributes = @{ NSForegroundColorAttributeName:BugshotKit.sharedManager.annotationFillColor };
     [presentingViewController presentViewController:nc animated:YES completion:NULL];
+}
+
++ (void)dismissAnimated:(BOOL)animated completion:(void(^)())completion {
+    UIViewController *presentingVC = BugshotKit.sharedManager.presentedNavigationController.presentingViewController;
+    if (presentingVC) {
+        [presentingVC dismissViewControllerAnimated:animated completion:completion];
+        [BugshotKit.sharedManager mainViewControllerDidClose:nil];
+    } else {
+        if (completion) completion();
+    }
 }
 
 - (void)mainViewControllerDidClose:(BSKMainViewController *)mainViewController
@@ -425,153 +423,13 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)(void))
     self.annotations = nil;
 }
 
-#pragma mark - Console logging
-
-- (void)currentConsoleLogWithDateStamps:(BOOL)dateStamps
-                         withCompletion:(void (^)(NSString *result))completion
-{
-    dispatch_async(self.logQueue, ^{
-        NSMutableString *string = [NSMutableString string];
-
-        char fdate[24];
-        for (BSKLogMessage *msg in self.consoleMessages) {
-            if (dateStamps) {
-                time_t timestamp = (time_t) msg.timestamp;
-                struct tm *lt = localtime(&timestamp);
-                strftime(fdate, 24, "%Y-%m-%d %T", lt);
-                [string appendFormat:@"%s.%03d %@\n", fdate, (int) (1000.0 * (msg.timestamp - floor(msg.timestamp))), msg.message];
-            } else {
-                [string appendFormat:@"%@\n", msg.message];
-            }
-        }
-
-        dispatch_async(dispatch_get_main_queue(), ^{
-            completion(string);
-        });
-    });
-}
-
-- (void)clearLog
-{
-    if (self.isDisabled) return;
-
-    [self.consoleMessages removeAllObjects];
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [NSNotificationCenter.defaultCenter postNotificationName:BSKNewLogMessageNotification object:nil];
-    });
-}
-
-+ (void)addLogMessage:(NSString *)message
-{
-    BugshotKit *manager = BugshotKit.sharedManager;
-    if (manager.isDisabled) return;
-
-    dispatch_async(manager.logQueue, ^{
-        [manager addLogMessage:message timestamp:[NSDate date].timeIntervalSince1970];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [NSNotificationCenter.defaultCenter postNotificationName:BSKNewLogMessageNotification object:nil];
-        });
-    });
-}
-
-// assumed to always be in logQueue
-- (void)addLogMessage:(NSString *)message timestamp:(NSTimeInterval)timestamp
-{
-    BSKLogMessage *msg = [BSKLogMessage new];
-    msg.message = message;
-    msg.timestamp = timestamp;
-    [self.consoleMessages addObject:msg];
-
-    // once the log has exceeded the length limit by 25%, prune it to the length limit
-    if (self.consoleMessages.count > self.consoleLogMaxLines * 1.25) {
-        [self.consoleMessages removeObjectsInRange:NSMakeRange(0, self.consoleMessages.count - self.consoleLogMaxLines)];
-    }
-}
-
-// assumed to always be in logQueue
-- (BOOL)updateFromASL
-{
-    pid_t myPID = getpid();
-
-    // thanks http://www.cocoanetics.com/2011/03/accessing-the-ios-system-log/
-
-    aslmsg q, m;
-    q = asl_new(ASL_TYPE_QUERY);
-    aslresponse r = asl_search(NULL, q);
-    BOOL foundNewEntries = NO;
-
-    while ( (m = asl_next(r)) ) {
-        if (myPID != atol(asl_get(m, ASL_KEY_PID))) continue;
-
-        // dupe checking
-        NSNumber *msgID = @( atoll(asl_get(m, ASL_KEY_MSG_ID)) );
-        if ([_collectedASLMessageIDs containsObject:msgID]) continue;
-        [_collectedASLMessageIDs addObject:msgID];
-        foundNewEntries = YES;
-
-        NSTimeInterval msgTime = (NSTimeInterval) atol(asl_get(m, ASL_KEY_TIME)) + ((NSTimeInterval) atol(asl_get(m, ASL_KEY_TIME_NSEC)) / 1000000000.0);
-        [self addLogMessage:[NSString stringWithUTF8String:asl_get(m, ASL_KEY_MSG)] timestamp:msgTime];
-    }
-
-    asl_release(r);
-    asl_free(q);
-
-    return foundNewEntries;
-}
-
-- (void)consoleImageWithSize:(CGSize)size
-                    fontSize:(CGFloat)fontSize
-             emptyBottomLine:(BOOL)emptyBottomLine
-              withCompletion:(void (^)(UIImage *result))completion
-{
-    [self currentConsoleLogWithDateStamps:NO withCompletion:^(NSString *consoleText) {
-        NSUInteger characterLimit = (NSUInteger) ((size.width / (fontSize / 2.0f)) * (size.height / fontSize));
-        if (consoleText.length > characterLimit) consoleText = [consoleText substringFromIndex:(consoleText.length - characterLimit)];
-
-        NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
-        paragraphStyle.lineBreakMode = NSLineBreakByWordWrapping;
-        paragraphStyle.alignment = NSTextAlignmentLeft;
-
-        NSDictionary *attributes = @{
-                                     NSFontAttributeName : [BugshotKit consoleFontWithSize:fontSize],
-                                     NSForegroundColorAttributeName : UIColor.blackColor,
-                                     NSParagraphStyleAttributeName : paragraphStyle,
-                                     };
-
-        NSMutableAttributedString *attrString = [[NSMutableAttributedString alloc] initWithString:consoleText attributes:attributes];
-
-        NSStringDrawingContext *stringDrawingContext = [NSStringDrawingContext new];
-        stringDrawingContext.minimumScaleFactor = 1.0;
-
-        NSStringDrawingOptions options = (NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingTruncatesLastVisibleLine | NSStringDrawingUsesFontLeading);
-
-        CGFloat padding = 2.0f;
-        CGSize renderSize = CGSizeMake(size.width - padding * 2.0f, size.height - padding * 2.0f);
-        if (emptyBottomLine) renderSize.height -= fontSize;
-
-        completion(BSKImageWithDrawing(size, ^{
-            [UIColor.whiteColor setFill];
-            [[UIBezierPath bezierPathWithRect:CGRectMake(0, 0, size.width, size.height)] fill];
-
-            CGRect stringRect = [attrString boundingRectWithSize:CGSizeMake(renderSize.width, MAXFLOAT) options:options context:stringDrawingContext];
-
-            stringRect.origin = CGPointMake(padding, padding);
-            if (stringRect.size.height < renderSize.height) stringRect.size.height = renderSize.height;
-            else stringRect.origin.y -= (stringRect.size.height - renderSize.height);
-
-            [attrString drawWithRect:stringRect options:options context:stringDrawingContext];
-        }));
-    }];
-}
-
 #pragma mark - App Store build detection
 
 + (BOOL)isProbablyAppStoreBuild
 {
 #if TARGET_IPHONE_SIMULATOR
     return NO;
-#endif
-
+#else
     // Adapted from https://github.com/blindsightcorp/BSMobileProvision
 
     NSString *binaryMobileProvision = [NSString stringWithContentsOfFile:[NSBundle.mainBundle pathForResource:@"embedded" ofType:@"mobileprovision"] encoding:NSISOLatin1StringEncoding error:NULL];
@@ -594,6 +452,7 @@ UIImage *BSKImageWithDrawing(CGSize size, void (^drawingCommands)(void))
     if (mobileProvision[@"ProvisionedDevices"] && ((NSDictionary *)mobileProvision[@"ProvisionedDevices"]).count) return NO; // development or ad-hoc
 
     return YES; // expected development/enterprise/ad-hoc entitlements not found
+#endif
 }
 
 

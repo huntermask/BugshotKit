@@ -37,9 +37,7 @@ typedef enum : NSUInteger {
 + (void)dismissAnimated:(BOOL)animated completion:(void(^)())completion;
 
 + (instancetype)sharedManager;
-- (void)clearLog;
 
-+ (void)addLogMessage:(NSString *)message;
 + (UIFont *)consoleFontWithSize:(CGFloat)size;
 
 @property (nonatomic, copy) NSString *destinationEmailAddress;
@@ -57,7 +55,7 @@ typedef enum : NSUInteger {
 
     To add more keys to get merged into this dictionary, return them from a custom extraInfoBlock:
 */
-+ (void)setExtraInfoBlock:(NSDictionary *(^)())extraInfoBlock;
++ (void)setExtraInfoBlock:(NSDictionary *(^)(void))extraInfoBlock;
 
 
 /*
@@ -81,24 +79,6 @@ typedef enum : NSUInteger {
  */
 + (void)setMailComposeCustomizeBlock:(void (^)(MFMailComposeViewController *mailComposer))mailComposeCustomizeBlock;
 
-/*
- You can display the console log viewer as selectable text. Defaults to NO which presents a screenshot of the log text.
-
- @param displayText YES if the console log should be displayed as selectable text. NO if it should use a screenshot.
- */
-+ (void)setDisplayConsoleTextInLogViewer:(BOOL)displayText;
-
-// feel free to mess with these if you want
-
-- (void)currentConsoleLogWithDateStamps:(BOOL)dateStamps
-                         withCompletion:(void (^)(NSString *result))completion;
-- (void)consoleImageWithSize:(CGSize)size
-                    fontSize:(CGFloat)fontSize
-             emptyBottomLine:(BOOL)emptyBottomLine
-              withCompletion:(void (^)(UIImage *result))completion;
-
-
-@property (nonatomic) BOOL displayConsoleTextInLogViewer;
 @property (nonatomic, strong) UIColor *annotationFillColor;
 @property (nonatomic, strong) UIColor *annotationStrokeColor;
 @property (nonatomic, strong) UIColor *toggleOnColor;

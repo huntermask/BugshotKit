@@ -14,7 +14,6 @@
 		4C15DA5D188F491000767C78 /* BSKAnnotationBoxView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C15DA45188F491000767C78 /* BSKAnnotationBoxView.m */; };
 		4C15DA5F188F491000767C78 /* BSKAnnotationView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C15DA47188F491000767C78 /* BSKAnnotationView.m */; };
 		4C15DA61188F491000767C78 /* BSKCheckerboardView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C15DA49188F491000767C78 /* BSKCheckerboardView.m */; };
-		4C15DA63188F491000767C78 /* BSKLogViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C15DA4B188F491000767C78 /* BSKLogViewController.m */; };
 		4C15DA64188F491000767C78 /* BSKMainViewController.h in Headers */ = {isa = PBXBuildFile; fileRef = 4C15DA4C188F491000767C78 /* BSKMainViewController.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		4C15DA65188F491000767C78 /* BSKMainViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C15DA4D188F491000767C78 /* BSKMainViewController.m */; };
 		4C15DA67188F491000767C78 /* BSKNavigationController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C15DA4F188F491000767C78 /* BSKNavigationController.m */; };
@@ -44,8 +43,6 @@
 		4C15DA47188F491000767C78 /* BSKAnnotationView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = BSKAnnotationView.m; sourceTree = "<group>"; };
 		4C15DA48188F491000767C78 /* BSKCheckerboardView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = BSKCheckerboardView.h; sourceTree = "<group>"; };
 		4C15DA49188F491000767C78 /* BSKCheckerboardView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = BSKCheckerboardView.m; sourceTree = "<group>"; };
-		4C15DA4A188F491000767C78 /* BSKLogViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = BSKLogViewController.h; sourceTree = "<group>"; };
-		4C15DA4B188F491000767C78 /* BSKLogViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = BSKLogViewController.m; sourceTree = "<group>"; };
 		4C15DA4C188F491000767C78 /* BSKMainViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = BSKMainViewController.h; sourceTree = "<group>"; };
 		4C15DA4D188F491000767C78 /* BSKMainViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = BSKMainViewController.m; sourceTree = "<group>"; };
 		4C15DA4E188F491000767C78 /* BSKNavigationController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = BSKNavigationController.h; sourceTree = "<group>"; };
@@ -114,8 +111,6 @@
 				4C15DA47188F491000767C78 /* BSKAnnotationView.m */,
 				4C15DA48188F491000767C78 /* BSKCheckerboardView.h */,
 				4C15DA49188F491000767C78 /* BSKCheckerboardView.m */,
-				4C15DA4A188F491000767C78 /* BSKLogViewController.h */,
-				4C15DA4B188F491000767C78 /* BSKLogViewController.m */,
 				4C15DA4C188F491000767C78 /* BSKMainViewController.h */,
 				4C15DA4D188F491000767C78 /* BSKMainViewController.m */,
 				4C15DA4E188F491000767C78 /* BSKNavigationController.h */,
@@ -246,7 +241,6 @@
 				4C15DA6D188F491000767C78 /* BSKWindow.m in Sources */,
 				4C15DA5D188F491000767C78 /* BSKAnnotationBoxView.m in Sources */,
 				4C15DA6B188F491000767C78 /* BSKToggleButton.m in Sources */,
-				4C15DA63188F491000767C78 /* BSKLogViewController.m in Sources */,
 				4C15DA59188F491000767C78 /* BSKAnnotationArrowView.m in Sources */,
 				4C15DA5B188F491000767C78 /* BSKAnnotationBlurView.m in Sources */,
 				4C15DA65188F491000767C78 /* BSKMainViewController.m in Sources */,
